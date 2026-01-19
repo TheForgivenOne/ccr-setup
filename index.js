@@ -70,8 +70,38 @@ function checkDependencies() {
   };
 }
 
+// Check if packages are already installed
+function checkExistingInstallations() {
+  try {
+    execSync('ccr --version', { stdio: 'pipe' });
+    return { ccrInstalled: true };
+  } catch (error) {
+    return { ccrInstalled: false };
+  }
+}
+
 // Install required packages with user confirmation
 async function installDependencies() {
+  const existingInstall = checkExistingInstallations();
+
+  if (existingInstall.ccrInstalled) {
+    console.log(chalk.green('✅ Claude Code Router is already installed'));
+
+    const { reinstall } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'reinstall',
+        message: 'Claude Code Router is already installed. Would you like to continue with the setup anyway?',
+        default: true
+      }
+    ]);
+
+    if (!reinstall) {
+      console.log(chalk.yellow('Skipping installation, continuing with configuration...'));
+      return;
+    }
+  }
+
   const { confirmInstall } = await inquirer.prompt([
     {
       type: 'confirm',
@@ -178,7 +208,7 @@ async function createConfigFile(apiKeyValue) {
         "HOST": "https://portal.qwen.ai/v1/chat/completions",
         "APIKEY": apiKeyValue,
         "MODELS": ["qwen3-coder-plus"],
-        "transformers": []
+        "transformers": ["anthropic"]
       }
     ],
     "Router": {
@@ -187,7 +217,12 @@ async function createConfigFile(apiKeyValue) {
       "think": "qwen,qwen3-coder-plus",
       "longContext": "qwen,qwen3-coder-plus",
       "longContextThreshold": 60000,
-      "webSearch": "qwen,qwen3-coder-plus"
+      "webSearch": "qwen,qwen3-coder-plus",
+      "fallback": {
+        "default": [
+          "qwen,qwen-max"
+        ]
+      }
     },
     "Server": {
       "enable_cors": true,
@@ -252,12 +287,14 @@ function showNextSteps() {
   console.log(chalk.white('  1. Claude Code Router is now active and running'));
   console.log(chalk.white('  2. Verify the service is running:'), chalk.cyan('curl http://127.0.0.1:3456/health'));
   console.log(chalk.white('  3. Use Claude Code with the router:'), chalk.cyan('claude-code --help'));
+  console.log(chalk.white('  4. Manage via Web UI:'), chalk.cyan('ccr ui'));
 
   console.log(chalk.blue('\n🔗 Additional Resources:'));
   console.log(chalk.white('  - Documentation: https://github.com/your-scope/claude-code-router'));
   console.log(chalk.white('  - Support: https://github.com/your-scope/claude-code-router/issues'));
 
-  console.log(chalk.yellow('\n💡 Pro Tip: The configuration is stored in ~/.claude-code-router/config.json'));
+  console.log(chalk.yellow('\n🔒 Security Notice: Keep your API keys secure'));
+  console.log(chalk.gray('   The configuration is stored in ~/.claude-code-router/config.json'));
   console.log(chalk.gray('   You can modify this file directly if you need to adjust settings later.'));
 }
 
