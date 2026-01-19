@@ -113,52 +113,9 @@ ${chalk.white('Proceed? [Y/n]')}`,
   }
 }
 
-// Get Qwen access token from user
-async function getQwenToken() {
-  console.log(chalk.blue('\n🔐 Configuring Qwen Access Token'));
-  console.log(chalk.gray('This token will be securely stored in your configuration file\n'));
-
-  const { qwenToken } = await inquirer.prompt([
-    {
-      type: 'password',
-      name: 'qwenToken',
-      message: 'Enter your Qwen Access Token:',
-      mask: '*',
-      validate: (input) => {
-        if (!input || input.trim().length === 0) {
-          return 'Access token cannot be empty';
-        }
-        // Basic validation - check if it looks like a token (you can customize this)
-        if (input.length < 10) {
-          return 'Access token seems too short, please verify';
-        }
-        return true;
-      }
-    }
-  ]);
-
-  return qwenToken.trim();
-}
-
-// Validate the Qwen token by attempting a simple API call
-async function validateQwenToken(token) {
-  const spinner = ora({
-    text: chalk.blue('Validating Qwen token...'),
-    spinner: 'clock'
-  });
-  spinner.start();
-
-  // This is a placeholder validation - in reality, you'd make an API call to Qwen
-  // For now, we'll just simulate validation
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  // Simulate a successful validation
-  spinner.succeed(chalk.green('Token validated successfully'));
-  return true;
-}
 
 // Create configuration directory and file
-async function createConfigFile(qwenToken) {
+async function createConfigFile(apiKeyValue) {
   const configDir = path.join(require('os').homedir(), '.claude-code-router');
   const configFile = path.join(configDir, 'config.json');
 
@@ -204,7 +161,7 @@ async function createConfigFile(qwenToken) {
       {
         "name": "qwen",
         "api_base_url": "https://portal.qwen.ai/v1/chat/completions",
-        "api_key": "$QWEN",
+        "api_key": apiKeyValue,
         "models": [
           "qwen3-coder-plus",
           "qwen3-coder-plus",
@@ -227,16 +184,19 @@ async function createConfigFile(qwenToken) {
     // Merge new config with existing, preserving existing settings where appropriate
     newConfig = { ...existingConfig, ...newConfig };
 
-    // Specifically merge Providers section
-    if (existingConfig.Providers) {
-      newConfig.Providers = { ...existingConfig.Providers, ...newConfig.Providers };
-
-      // If Qwen already exists, preserve other settings but update token
-      if (existingConfig.Providers.Qwen) {
-        newConfig.Providers.Qwen = {
-          ...existingConfig.Providers.Qwen,
-          ...newConfig.Providers.Qwen
-        };
+    // Specifically merge Providers section if it exists in both
+    if (existingConfig.Providers && Array.isArray(existingConfig.Providers)) {
+      // If existing config has array of providers, merge appropriately
+      const existingQwenProvider = existingConfig.Providers.find(provider => provider.name === 'qwen');
+      if (existingQwenProvider) {
+        // Update the api_key in the existing qwen provider
+        const updatedProviders = existingConfig.Providers.map(provider => {
+          if (provider.name === 'qwen') {
+            return { ...provider, api_key: apiKeyValue };
+          }
+          return provider;
+        });
+        newConfig.Providers = updatedProviders;
       }
     }
   }
@@ -268,8 +228,8 @@ function showNextSteps() {
   console.log(chalk.green('\n🎉 Setup completed successfully!\n'));
 
   console.log(chalk.blue('🚀 Next Steps:'));
-  console.log(chalk.white('  1. Start the Claude Code Router:'), chalk.cyan('ccr start'));
-  console.log(chalk.white('  2. Verify the service is running:'), chalk.cyan('curl http://localhost:8000/health'));
+  console.log(chalk.white('  1. Claude Code Router is now active and running'));
+  console.log(chalk.white('  2. Verify the service is running:'), chalk.cyan('curl http://127.0.0.1:3456/health'));
   console.log(chalk.white('  3. Use Claude Code with the router:'), chalk.cyan('claude-code --help'));
 
   console.log(chalk.blue('\n🔗 Additional Resources:'));
@@ -291,14 +251,62 @@ async function main() {
   // Install required packages
   await installDependencies();
 
-  // Get Qwen token from user
-  const qwenToken = await getQwenToken();
+  // Initial Launch: Execute ccr restart to trigger default initialization
+  const restartSpinner = ora({
+    text: chalk.blue('Starting Claude Code Router for initial setup...'),
+    spinner: 'clock'
+  });
+  restartSpinner.start();
 
-  // Validate the token
-  await validateQwenToken(qwenToken);
+  try {
+    execSync('ccr restart', { stdio: 'pipe' });
+    restartSpinner.succeed(chalk.green('CCR started for initial setup'));
+  } catch (error) {
+    restartSpinner.warn(chalk.yellow('CCR may not be fully started yet, continuing...'));
+  }
 
-  // Create configuration file
-  const configFile = await createConfigFile(qwenToken);
+  // Wait: Implement a 30-second delay with a loading spinner
+  const waitSpinner = ora({
+    text: chalk.blue('Waiting for CCR to initialize defaults...'),
+    spinner: 'clock'
+  });
+  waitSpinner.start();
+
+  // Wait for 30 seconds using a Promisified setTimeout (non-blocking)
+  await new Promise(resolve => setTimeout(resolve, 30000));
+
+  waitSpinner.succeed(chalk.green('CCR initialization complete'));
+
+  // Credential Handling: Prompt for Qwen API Key
+  const { qwenApiKey } = await inquirer.prompt([
+    {
+      type: 'password',
+      name: 'qwenApiKey',
+      message: 'Enter your Qwen API Key (leave blank to set manually via env var):',
+      mask: '*',
+      default: ''
+    }
+  ]);
+
+  // Determine the API key value based on user input
+  const apiKeyValue = qwenApiKey.trim() ? qwenApiKey.trim() : '$QWEN';
+
+  // Create configuration file with the determined API key
+  const configFile = await createConfigFile(apiKeyValue);
+
+  // Finalize: Execute ccr restart to apply the new configuration
+  const finalRestartSpinner = ora({
+    text: chalk.blue('Applying new configuration...'),
+    spinner: 'clock'
+  });
+  finalRestartSpinner.start();
+
+  try {
+    execSync('ccr restart', { stdio: 'pipe' });
+    finalRestartSpinner.succeed(chalk.green('CCR restarted with new configuration'));
+  } catch (error) {
+    finalRestartSpinner.fail(chalk.red('Failed to restart CCR, please restart manually'));
+  }
 
   // Show next steps
   showNextSteps();
