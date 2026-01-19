@@ -159,14 +159,11 @@ async function createConfigFile(apiKeyValue) {
     "API_TIMEOUT_MS": 600000,
     "Providers": [
       {
-        "name": "qwen",
-        "api_base_url": "https://portal.qwen.ai/v1/chat/completions",
-        "api_key": apiKeyValue,
-        "models": [
-          "qwen3-coder-plus",
-          "qwen3-coder-plus",
-          "qwen3-coder-plus"
-        ]
+        "NAME": "qwen",
+        "HOST": "https://portal.qwen.ai/v1/chat/completions",
+        "APIKEY": apiKeyValue,
+        "MODELS": ["qwen3-coder-plus"],
+        "transformers": []
       }
     ],
     "Router": {
@@ -240,6 +237,30 @@ function showNextSteps() {
   console.log(chalk.gray('   You can modify this file directly if you need to adjust settings later.'));
 }
 
+// Wait for server to be running with timeout
+async function waitForServer(spinner) {
+  const startTime = Date.now();
+  const timeout = 30000; // 30 seconds timeout
+
+  while (Date.now() - startTime < timeout) {
+    try {
+      const statusOutput = execSync('ccr status', { stdio: 'pipe', encoding: 'utf-8' });
+
+      if (statusOutput.includes('Claude Code Router Status: Running')) {
+        return; // Server is running, exit the function
+      }
+    } catch (error) {
+      // If ccr status fails, server might not be ready yet, continue waiting
+    }
+
+    // Wait 1 second before checking again
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+
+  // If we reach here, the timeout has been exceeded
+  spinner.warn(chalk.yellow('Timeout reached while waiting for server to start'));
+}
+
 // Main setup function
 async function main() {
   console.log(chalk.bold.rgb(100, 200, 255('🌈 Welcome to Claude Code Router (CCR) Setup')));
@@ -251,29 +272,29 @@ async function main() {
   // Install required packages
   await installDependencies();
 
-  // Initial Launch: Execute ccr restart to trigger default initialization
-  const restartSpinner = ora({
+  // Initial Launch: Execute ccr start --daemon to trigger default initialization
+  const startSpinner = ora({
     text: chalk.blue('Starting Claude Code Router for initial setup...'),
     spinner: 'clock'
   });
-  restartSpinner.start();
+  startSpinner.start();
 
   try {
-    execSync('ccr restart', { stdio: 'pipe' });
-    restartSpinner.succeed(chalk.green('CCR started for initial setup'));
+    execSync('ccr start --daemon', { stdio: 'pipe' });
+    startSpinner.succeed(chalk.green('CCR started for initial setup'));
   } catch (error) {
-    restartSpinner.warn(chalk.yellow('CCR may not be fully started yet, continuing...'));
+    startSpinner.warn(chalk.yellow('CCR may not be fully started yet, continuing...'));
   }
 
-  // Wait: Implement a 30-second delay with a loading spinner
+  // Wait: Implement robust server wait logic instead of hardcoded sleep
   const waitSpinner = ora({
     text: chalk.blue('Waiting for CCR to initialize defaults...'),
     spinner: 'clock'
   });
   waitSpinner.start();
 
-  // Wait for 30 seconds using a Promisified setTimeout (non-blocking)
-  await new Promise(resolve => setTimeout(resolve, 30000));
+  // Wait for server to be running with timeout
+  await waitForServer(waitSpinner);
 
   waitSpinner.succeed(chalk.green('CCR initialization complete'));
 
@@ -310,6 +331,23 @@ async function main() {
 
   // Show next steps
   showNextSteps();
+
+  // Verification: Run ccr status and display PID and Uptime
+  const verifySpinner = ora({
+    text: chalk.blue('Verifying Claude Code Router status...'),
+    spinner: 'clock'
+  });
+  verifySpinner.start();
+
+  try {
+    const statusOutput = execSync('ccr status', { stdio: 'pipe', encoding: 'utf-8' });
+    verifySpinner.succeed(chalk.green('Verification complete'));
+    console.log(chalk.green('\n📋 Claude Code Router Status:'));
+    console.log(statusOutput);
+  } catch (error) {
+    verifySpinner.fail(chalk.red('Could not retrieve CCR status'));
+    console.log(chalk.yellow('You can manually check status with: ccr status'));
+  }
 
   console.log(chalk.green('\n✅ Setup complete! You\'re ready to use Claude Code Router.'));
 }
