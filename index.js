@@ -106,6 +106,21 @@ ${chalk.white('Proceed? [Y/n]')}`,
     execSync('npm install -g @anthropic-ai/claude-code @musistudio/claude-code-router', { stdio: 'inherit' });
 
     spinner.succeed(chalk.green('All packages installed successfully'));
+
+    // Verify installations
+    const verifySpinner = ora({
+      text: chalk.blue('Verifying installations...'),
+      spinner: 'clock'
+    });
+    verifySpinner.start();
+
+    try {
+      execSync('ccr --version', { stdio: 'pipe' });
+      execSync('claude --version', { stdio: 'pipe' });
+      verifySpinner.succeed(chalk.green('All tools verified successfully'));
+    } catch (verificationError) {
+      verifySpinner.warn(chalk.yellow('Some tools may not be available in PATH. You may need to restart your terminal.'));
+    }
   } catch (error) {
     spinner.fail(chalk.red('Failed to install packages'));
     console.error(error.message);
@@ -173,6 +188,15 @@ async function createConfigFile(apiKeyValue) {
       "longContext": "qwen,qwen3-coder-plus",
       "longContextThreshold": 60000,
       "webSearch": "qwen,qwen3-coder-plus"
+    },
+    "Server": {
+      "enable_cors": true,
+      "allow_origins": ["*"],
+      "rate_limit": {
+        "enabled": true,
+        "requests": 100,
+        "window_ms": 60000
+      }
     }
   };
 
@@ -237,10 +261,38 @@ function showNextSteps() {
   console.log(chalk.gray('   You can modify this file directly if you need to adjust settings later.'));
 }
 
+// Check if port is available
+async function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const net = require('net');
+    const server = net.createServer();
+
+    server.listen(port, '127.0.0.1', () => {
+      server.close(() => {
+        resolve(true);
+      });
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(false);
+      } else {
+        resolve(true); // If there's another error, assume port is available
+      }
+    });
+  });
+}
+
 // Wait for server to be running with timeout
 async function waitForServer(spinner) {
   const startTime = Date.now();
   const timeout = 30000; // 30 seconds timeout
+
+  // Check if port is available before waiting
+  const portAvailable = await isPortAvailable(3456);
+  if (!portAvailable) {
+    spinner.warn(chalk.yellow('Port 3456 may be in use. The server might fail to start.'));
+  }
 
   while (Date.now() - startTime < timeout) {
     try {
