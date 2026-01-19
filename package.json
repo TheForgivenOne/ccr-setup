@@ -1,0 +1,42 @@
+{
+  "name": "@your-scope/ccr-setup",
+  "version": "1.0.0",
+  "description": "Zero-config setup tool for Claude Code Router (CCR)",
+  "main": "index.js",
+  "bin": {
+    "ccr-setup": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "claude",
+    "code",
+    "router",
+    "ccr",
+    "setup",
+    "devops",
+    "automation"
+  ],
+  "author": "successmove",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "inquirer": "^8.2.6",
+    "ora": "^5.4.1",
+    "axios": "^1.6.0",
+    "fs-extra": "^11.1.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheForgivenOne/ccr-setup.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TheForgivenOne/ccr-setup/issues"
+  },
+  "homepage": "https://github.com/TheForgivenOne/ccr-setup#readme"
+}
